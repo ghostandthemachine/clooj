@@ -4,7 +4,9 @@
 ; arthuredelstein@gmail.com
 
 (ns clooj.core
- (:use [seesaw core graphics color]
+ (:use  [seesaw.core :exclude [text-area-options]]
+        [seesaw.graphics]
+        [seesaw.color]
         [clojure.pprint :only (pprint)]
         [clooj.dev-tools]
         [clooj.brackets]
@@ -16,7 +18,8 @@
         [clooj.utils]
         [clooj.indent]
         [clooj.style]
-        [clooj.navigate])
+        [clooj.navigate]
+        [clooj.rsyntax])
   (:import (javax.swing AbstractListModel BorderFactory JDialog
                         JFrame JLabel JList JMenuBar JOptionPane
                         JPanel JScrollPane JSplitPane JTextArea
@@ -38,55 +41,97 @@
            (org.fife.ui.rsyntaxtextarea RSyntaxTextArea SyntaxConstants TokenMakerFactory)  
            (org.fife.ui.rtextarea RTextScrollPane)))
 
+(def app (atom nil))
 
+(defn make-tabs [doc-tree completion]
+  (tabbed-panel
+    :tabs [{ :title "Docs" :content doc-tree }
+           { :title "Completion"  :content completion}]))
+
+        
 (defn create-app []
   (let [
-        arglist-label (label)
+        arglist-label (label
+                        :id :arglist-label)
         
-        search-text-area (text :size [200 :by 12])
-        pos-label (label :font (font "COURIER" 13))
+        search-text-area (text 
+                            :size [200 :by 12]
+                            :id :search-text-area)
+        pos-label (label 
+                    :font (font "COURIER" 13)
+                    :id :pos-label)
         position-search-panel (border-panel 
                                 :west pos-label 
                                 :center search-text-area
-                                :hgap 15)
+                                :hgap 15
+                                :id :position-search-panel)
 
-        doc-label (label "Source Editor")        
-        doc-text-area (make-text-area false)
+        doc-label (label 
+                    :text "Source Editor"
+                    :id :doc-label)        
+        doc-text-area (text-area 
+                            :wrap-lines? false
+                            :id :doc-text-area)
         doc-scroll-pane (make-scroll-pane doc-text-area)
         doc-text-panel (vertical-panel :items [doc-label doc-scroll-pane position-search-panel])
         
-        help-text-area (make-text-area true)
+        help-text-area (text-area
+                            :id :help-text-area
+                            :wrap-lines? true
+                            :editable? false
+                            :background (color 0xFF 0xFF 0xE8))
+
         help-text-scroll-pane (scrollable help-text-area)
 
-        completion-label (label "Name search")
-        completion-list (listbox )
+        completion-label (label
+                            :text "Name search"
+                            :id :completion-label)
+        
+        completion-list (listbox 
+                            :id :completion-list)
+
         completion-scroll-pane (scrollable completion-list)
-        completion-panel (vertical-panel :items [completion-label completion-scroll-pane])
+        completion-panel (vertical-panel 
+                            :id :completion-panel
+                            :items [completion-label completion-scroll-pane])
 
-        cp (:content-pane frame)
+        docs-tree (tree
+                      :id :docs-tree
+                      :model (DefaultTreeModel. nil))
 
-        docs-tree (tree)
         docs-tree-scroll-pane (scrollable docs-tree)
+
         docs-tree-label (border-panel 
-                          :west (label "Projects")
-                          :size [200 :by 15]
-                          :vgap 5)
+                            :west (label "Projects")
+                            :size [200 :by 15]
+                            :vgap 5)
+
         docs-tree-panel (vertical-panel 
                             :items [docs-tree-label 
                                     docs-tree-scroll-pane])
 
-        doc-split-pane (left-right-split
-                         docs-tree-panel
-                         doc-text-panel
-                         :divider-location 0.2)
+        navigation-tab-panel (make-tabs docs-tree-panel completion-panel)
 
-        repl-out-text-area (make-text-area false)
+        doc-split-pane (left-right-split
+                            navigation-tab-panel
+                            doc-text-panel
+                            :divider-location 0.2)
+
+        repl-out-text-area (text-area 
+                                :wrap-lines? false
+                                :id :repl-out-text-area
+                                :editable? false)
+
         repl-out-writer (make-repl-writer repl-out-text-area)
         
         repl-out-scroll-pane (scrollable repl-out-text-area)
-        repl-output-vertical-panel (vertical-panel :items [repl-out-scroll-pane])
+        repl-output-vertical-panel (vertical-panel 
+                                        :items [repl-out-scroll-pane])
 
-        repl-in-text-area (make-text-area false)
+        repl-in-text-area (text-area 
+                                :wrap-lines? false
+                                :id :repl-in-text-area)
+
         repl-input-vertical-panel (vertical-panel :items [repl-in-text-area])
 
         repl-split-pane (top-bottom-split 
@@ -99,47 +144,26 @@
                         repl-split-pane 
                         :divider-location 0.7)
 
-        frame (frame 
-                :title "Overtone sketch" 
+        root (frame 
+                :title "Sketchpad" 
                 :width 950 
                 :height 700 
                 :on-close :exit
                 :minimum-size [500 :by 350]
                 :content split-pane)
 
-        app (merge {:file (atom nil)
-                    :repl (atom (create-outside-repl repl-out-writer nil))
-                    :changed false}
-                   (gen-map
-                     doc-text-area
-                     doc-label
-                     repl-out-text-area
-                     repl-in-text-area
-                     frame
-                     help-text-area
-                     help-text-scroll-pane
-                     repl-out-scroll-pane
-                     docs-tree
-                     docs-tree-scroll-pane
-                     docs-tree-panel
-                     docs-tree-label
-                     search-text-area
-                     pos-label
-                     repl-out-writer
-                     doc-split-pane
-                     repl-split-pane
-                     split-pane
-                     arglist-label
-                     completion-list
-                     completion-scroll-pane
-                     completion-panel))]
+
+        ]
 
 
-    
+    (reset! app {:file (atom nil)
+                       :repl (atom (create-outside-repl repl-out-writer nil))
+                       :changed false})
+
     (doto doc-text-area
       attach-navigation-keys)
     
-    (setup-completion-list completion-list app)
+    (setup-completion-list completion-list app root)
 
     
     (double-click-selector doc-text-area)
@@ -151,47 +175,58 @@
     (.setSyntaxEditingStyle repl-in-text-area
                             SyntaxConstants/SYNTAX_STYLE_CLOJURE)
 
-    (.setModel docs-tree (DefaultTreeModel. nil))
-
-    ; (exit-if-closed frame)
-
-    (setup-search-text-area app)
+    (setup-search-text-area root)
     
-    (add-caret-listener doc-text-area #(display-caret-position app))
+    (add-caret-listener doc-text-area #(display-caret-position root))
     
-    (activate-caret-highlighter app)
-    
-    (setup-temp-writer app)
+    (activate-caret-highlighter root app)
     
     (attach-action-keys doc-text-area
-      ["cmd1 ENTER" #(send-selected-to-repl app)])
-    
-    (doto repl-out-text-area (.setEditable false))
-    
-    (doto help-text-area (.setEditable false)
-                         (.setBackground (color 0xFF 0xFF 0xE8)))
-    
-    (setup-autoindent repl-in-text-area)
-    
-    (setup-tab-help app doc-text-area)
+      ["cmd1 ENTER" #(send-selected-to-repl root app)])
     
     (dorun (map #(attach-global-action-keys % app)
-                [docs-tree doc-text-area repl-in-text-area repl-out-text-area (.getContentPane frame)]))
+                [docs-tree doc-text-area repl-in-text-area repl-out-text-area (.getContentPane root)]))
     
     (setup-autoindent doc-text-area)
-    app))
+    root))
 
 (defonce current-app (atom nil))
+ 
+(defn add-behaviors [root app]
+  (Thread/setDefaultUncaughtExceptionHandler
+    (proxy [Thread$UncaughtExceptionHandler] []
+      (uncaughtException [thread exception]
+                       (println thread) (.printStackTrace exception))))
+
+  (native!)
+  (reset! current-app @app)
+  (make-menus root current-app)
+  (add-visibility-shortcut current-app)
+  (setup-autoindent (select root [:#repl-in-text-area]))
+
+  
+  (add-repl-input-handler root current-app)
+
+  (setup-tab-help root (select root [:#repl-in-text-area]))
+
+  (doall (map #(add-project current-app %) (load-project-set)))
+  (let [frame root]
+    (persist-window-shape clooj-prefs "main-window" frame) 
+    (.setVisible frame true)
+    (on-window-activation frame #(update-project-tree (select root [:#docs-tree]))))
+  (setup-temp-writer root current-app)
+  (setup-tree root current-app)
+  (let [tree (select root [:#docs-tree])]
+    (load-expanded-paths tree)
+    (load-tree-selection tree))
+  (load-font root))
 
 (defn -show []
   (reset! embedded true)
   (if (not @current-app)
-    (startup create-app current-app)
+    (add-behaviors create-app current-app)
     (.setVisible (:frame @current-app) true)))
 
 (defn -main [& args]
-  (reset! embedded false)
-  (startup create-app current-app))
-
-
+  (invoke-later (show! (add-behaviors (create-app) app))))
 

@@ -5,6 +5,8 @@
 
 (ns clooj.utils
   (:require [clojure.string :as string :only (join split)])
+  (:use [clojure.pprint]
+        [seesaw.core])
 	(:import (java.util UUID)
            (java.awt FileDialog Point Window)
            (java.awt.event ActionListener MouseAdapter)

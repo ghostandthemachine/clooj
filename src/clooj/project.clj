@@ -11,7 +11,8 @@
                              TreePath TreeSelectionModel))
   (:use [clooj.utils :only (clooj-prefs read-value-from-prefs
                             write-value-to-prefs awt-event
-                            choose-file)]))
+                            choose-file)]
+        [seesaw.core]))
 
 ;; projects tree
 
@@ -171,16 +172,16 @@
 (defn get-node-path [node]
   (.. node getUserObject getAbsolutePath))
 
-(defn get-selected-file-path [app]
-  (when-let [tree-path (-> app :docs-tree .getSelectionPaths first)]
+(defn get-selected-file-path [root]
+  (when-let [tree-path (-> (select root [:#docs-tree]) .getSelectionPaths first)]
     (-> tree-path .getLastPathComponent .getUserObject .getAbsolutePath)))
 
 (defn get-selected-namespace [tree]
   (->> tree .getSelectionPaths first
        .getLastPathComponent .getUserObject .toString))
 
-(defn get-selected-projects [app]
-  (let [tree (app :docs-tree)
+(defn get-selected-projects [root]
+  (let [tree (select root [:#docs-tree])
         selections (.getSelectionPaths tree)]
     (for [selection selections]
       (->> selection .getLastPathComponent (get-project-node tree)
@@ -189,17 +190,17 @@
 (defn add-project [app project-path]
   (swap! project-set conj project-path))
 
-(defn rename-project [app]
-  (when-let [dir (choose-file (app :frame) "Move/rename project directory" "" false)]
-    (let [old-project (first (get-selected-projects app))]
+(defn rename-project [root]
+  (when-let [dir (choose-file root "Move/rename project directory" "" false)]
+    (let [old-project (first (get-selected-projects root))]
       (if (.renameTo (File. old-project) dir)
         (do
           (swap! project-set
                  #(-> % (disj old-project) (conj (.getAbsolutePath dir))))
-          (update-project-tree (:docs-tree app)))
+          (update-project-tree (select root [:#docs-tree])))
         (JOptionPane/showMessageDialog nil "Unable to move project.")))))
 
-(defn remove-selected-project [app]
-  (apply swap! project-set disj (get-selected-projects app))
-  (update-project-tree (app :docs-tree)))     
+(defn remove-selected-project [root]
+  (apply swap! project-set disj (get-selected-projects root))
+  (update-project-tree (select config [:#docs-tree])))     
       

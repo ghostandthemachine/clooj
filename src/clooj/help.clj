@@ -21,7 +21,10 @@
         [clj-inspector.jars :only (clj-sources-from-jar jar-files)]
         [clj-inspector.vars :only (analyze-clojure-source
                                     parse-ns-form
-                                   )])
+                                   )]
+        [seesaw.core]
+        [clojure.pprint]
+        )
   (:require [clojure.string :as string]
             [cemerick.pomegranate.aether :as aether]))
 
@@ -106,11 +109,11 @@
       (re-find #"(.*?)[\s|\)|$]"
                (str (.trim form-string) " ")))))
 
-(defn current-ns-form [app]
-  (-> app :doc-text-area .getText read-string))
-
-(defn ns-available-names [app]
-  (parse-ns-form (current-ns-form app)))
+(defn current-ns-form [root]
+  (-> (select root [:#doc-text-area]) .getText read-string))
+  
+(defn ns-available-names [root]
+  (parse-ns-form (current-ns-form root)))
 
 (defn arglist-from-var-map [m]
   (or
@@ -123,27 +126,26 @@
 
 (defn matching-vars [app token]
   (into {} (filter #(= token (second (first %)))
-                   (-> app :repl deref :var-maps deref))))
+                   (-> @app :repl deref :var-maps deref))))
 
-(defn var-from-token [app current-ns token]
+(defn var-from-token [root current-ns token]
   (when token
     (if (.contains token "/")
       (vec (.split token "/"))
-      (or ((ns-available-names app) token)
+      (or ((ns-available-names root) token)
           [current-ns token]))))
 
-(defn arglist-from-token [app ns token]
+(defn arglist-from-token [root app ns token]
   (or (special-forms token)
-      (-> app :repl deref :var-maps
-          deref (get (var-from-token app ns token))
-          arglist-from-var-map)))
+    (-> @app :repl deref :var-maps
+        deref (get (var-from-token root ns token))
+        arglist-from-var-map)))
 
-(defn arglist-from-caret-pos [app ns text pos]
+(defn arglist-from-caret-pos [root app ns text pos]
   (let [token (token-from-caret-pos text pos)]
-    (arglist-from-token app ns token)))
+    (arglist-from-token root app ns token)))
 
 ;; tab help
-
 
 (defonce help-state (atom {:visible false :token nil :pos nil}))
 
@@ -246,8 +248,8 @@
 (defn list-size [list]
   (-> list .getModel .getSize))
 
-(defn advance-help-list [app token index-change-fn]
-  (let [help-list (app :completion-list)
+(defn advance-help-list [root app token index-change-fn]
+  (let [help-list (select root [:#completion-list])
         token-pat1 (re-pattern (str "(?i)\\A\\Q" token "\\E"))
         token-pat2 (re-pattern (str "(?i)\\Q" token "\\E"))]
     (if (not= token (@help-state :token))
@@ -276,30 +278,58 @@
                                     (.getSelectedIndex help-list))
                                n)))))
     (when (pos? (list-size help-list))
-      (set-first-component (app :repl-split-pane)
-                           (app :help-text-scroll-pane))
-      (set-first-component (app :doc-split-pane)
-                           (app :completion-panel))
-      (.setText (app :repl-label) "Documentation")
+      (set-first-component (select root [:#repl-split-pane])
+                           (select root [:#help-text-scroll-pane]))
+      (set-first-component (select root [:#doc-split-pane])
+                           (select root [:#completion-panel]))
+      (config! (select root [:#repl-label]) :text "Documentation")
       (.ensureIndexIsVisible help-list
                              (.getSelectedIndex help-list)))))
   
-(defn get-list-item [app]
-  (-> app :completion-list .getSelectedValue))
+; (defn get-list-item [app]
+;   (-> app :completion-list .getSelectedValue))
+  
+(defn get-list-item [root]
+  (-> (select root [:#completion-list]) .getSelectedValue))
 
-(defn get-list-artifact [app]
+; (defn get-list-artifact [app]
+;   (binding [*read-eval* false] 
+;     (read-string (:artifact (get-list-item app)))))
+
+(defn get-list-artifact [root]
   (binding [*read-eval* false] 
-    (read-string (:artifact (get-list-item app)))))
+    (read-string (:artifact (get-list-item root)))))
 
-(defn get-list-token [app]
-  (let [val (get-list-item app)]
+; (defn get-list-token [app]
+;   (let [val (get-list-item app)]
+;     (str (:ns val) "/" (:name val))))
+
+(defn get-list-token [root]
+  (let [val (get-list-item root)]
     (str (:ns val) "/" (:name val))))
 
-(defn show-help-text [app choice]
+; (defn show-help-text [app choice]
+;   (let [help-text (or (when choice (item-help choice)) "")]
+;     (config! (select root [:#help-text-area]) :text help-text))
+;   (-> app :help-text-scroll-pane .getViewport
+;       (.setViewPosition (Point. (int 0) (int 0)))))
+
+(defn show-help-text [root choice]
   (let [help-text (or (when choice (item-help choice)) "")]
-    (.setText (app :help-text-area) help-text))
-  (-> app :help-text-scroll-pane .getViewport
+    (config! (select root [:#help-text-area]) :text help-text))
+  (-> (select root [:#help-text-scroll-pane]) .getViewport
       (.setViewPosition (Point. (int 0) (int 0)))))
+
+
+
+; (defn show-tab-help [app text-comp index-change-fn]
+;   (awt-event
+;     (let [text (get-text-str text-comp)
+;           pos (.getCaretPosition text-comp)
+;           [start stop] (local-token-location text pos)]
+;       (when-let [token (.substring text start stop)]
+;         (swap! help-state assoc :pos start :visible true)
+;         (advance-help-list app token index-change-fn)))))
 
 (defn show-tab-help [app text-comp index-change-fn]
   (awt-event
@@ -310,64 +340,124 @@
         (swap! help-state assoc :pos start :visible true)
         (advance-help-list app token index-change-fn)))))
 
-(defn hide-tab-help [app]
+(defn hide-tab-help [root]
   (awt-event
     (when (@help-state :visible)
-      (set-first-component (app :repl-split-pane)
-                           (app :repl-out-scroll-pane))
-      (set-first-component (app :doc-split-pane)
-                           (app :docs-tree-panel))
-      (.setText (app :repl-label) "Clojure REPL output"))
+      (set-first-component (select root [:#repl-split-pane])
+                           (select root [:#repl-out-scroll-pane]))
+      (set-first-component (select root [:#doc-split-pane])
+                           (select root [:#docs-tree-panel]))
+      (config! (select root [:#repl-label]) :text "Clojure REPL output"))
     (swap! help-state assoc :visible false :pos nil)))
+
+; (defn hide-tab-help [app]
+;   (awt-event
+;     (when (@help-state :visible)
+;       (set-first-component (app :repl-split-pane)
+;                            (app :repl-out-scroll-pane))
+;       (set-first-component (app :doc-split-pane)
+;                            (app :docs-tree-panel))
+;       (.setText (app :repl-label) "Clojure REPL output"))
+;     (swap! help-state assoc :visible false :pos nil)))
   
-(defn help-handle-caret-move [app text-comp]
+; (defn help-handle-caret-move [app text-comp]
+;   (awt-event
+;     (when (@help-state :visible)
+;       (let [[start _] (local-token-location (get-text-str text-comp) 
+;                                             (.getCaretPosition text-comp))]
+;         (if-not (= start (@help-state :pos))
+;           (hide-tab-help app)
+;           (show-tab-help app text-comp identity))))))  
+
+(defn help-handle-caret-move [root text-comp]
   (awt-event
     (when (@help-state :visible)
       (let [[start _] (local-token-location (get-text-str text-comp) 
                                             (.getCaretPosition text-comp))]
         (if-not (= start (@help-state :pos))
-          (hide-tab-help app)
-          (show-tab-help app text-comp identity))))))
+          (hide-tab-help root)
+          (show-tab-help root text-comp identity))))))
 
 (defn update-ns-form [app]
   (current-ns-form app))
 
-(defn load-dependencies [app artifact]
+(defn load-dependencies [artifact]
   (println "Loading " artifact)
   (let [deps (cemerick.pomegranate.aether/resolve-dependencies
                :coordinates [artifact]
                :repositories {"clojars" "http://clojars.org/repo"})]
     (aether/dependency-files deps)))
   
-(defn update-token [app text-comp new-token]
+; (defn update-token [app text-comp new-token]
+;   (awt-event
+;     (let [[start stop] (local-token-location
+;                          (get-text-str text-comp)
+;                          (.getCaretPosition text-comp))
+;           len (- stop start)]
+;       (when (and (not (empty? new-token)) (-> app :completion-list
+;                                               .getModel .getSize pos?))
+;         (.. text-comp getDocument
+;             (replace start len new-token nil))))))
+
+(defn update-token [root text-comp new-token]
   (awt-event
     (let [[start stop] (local-token-location
                          (get-text-str text-comp)
                          (.getCaretPosition text-comp))
           len (- stop start)]
-      (when (and (not (empty? new-token)) (-> app :completion-list
+      (when (and (not (empty? new-token)) (-> (select root [:#completion-list])
                                               .getModel .getSize pos?))
         (.. text-comp getDocument
             (replace start len new-token nil))))))
 
-(defn setup-tab-help [app text-comp]
+; (defn setup-tab-help [app text-comp]
+;   (attach-action-keys text-comp
+;     ["TAB" #(show-tab-help app text-comp inc)]
+;     ["shift TAB" #(show-tab-help app text-comp dec)]
+;     ["ESCAPE" #(hide-tab-help app)])
+;   (attach-child-action-keys text-comp
+;     ["ENTER" #(@help-state :visible)
+;              #(do (hide-tab-help app)
+;                     (load-dependencies app (get-list-artifact app))
+;                     (update-token app text-comp (get-list-token app)))]))
+
+(defn setup-tab-help [root text-comp]
   (attach-action-keys text-comp
-    ["TAB" #(show-tab-help app text-comp inc)]
-    ["shift TAB" #(show-tab-help app text-comp dec)]
-    ["ESCAPE" #(hide-tab-help app)])
+    ["TAB" #(show-tab-help root text-comp inc)]
+    ["shift TAB" #(show-tab-help root text-comp dec)]
+    ["ESCAPE" #(hide-tab-help root)])
   (attach-child-action-keys text-comp
     ["ENTER" #(@help-state :visible)
-             #(do (hide-tab-help app)
-                    (load-dependencies app (get-list-artifact app))
-                    (update-token app text-comp (get-list-token app)))]))
+             #(do (hide-tab-help root)
+                    (load-dependencies (get-list-artifact root))
+                    (update-token root text-comp (get-list-token root)))]))
 
-(defn find-focused-text-pane [app]
-  (let [t1 (app :doc-text-area)
-        t2 (app :repl-in-text-area)]
-    (cond (.hasFocus t1) t1
-          (.hasFocus t2) t2)))
+(defn find-focused-text-pane [root]
+  (let [t1 (select root [:#doc-text-area])
+        t2 (select root [:#repl-in-text-area])]
+    (cond (config t1 :has-focus) t1
+          (config t2 :has-focus) t2)))
 
-(defn setup-completion-list [l app]
+; (defn setup-completion-list [l app]
+;   (doto l
+;     (.setBackground (Color. 0xFF 0xFF 0xE8))
+;     (.setFocusable false)
+;     (.setSelectionMode ListSelectionModel/SINGLE_SELECTION)
+;     (.setCellRenderer
+;       (proxy [DefaultListCellRenderer] []
+;         (getListCellRendererComponent [list item index isSelected cellHasFocus]
+;           (doto (proxy-super getListCellRendererComponent list item index isSelected cellHasFocus)
+;             (.setText (present-item item)))))) 
+;     (.addListSelectionListener
+;       (reify ListSelectionListener
+;         (valueChanged [_ e]
+;           (when-not (.getValueIsAdjusting e)
+;             (.ensureIndexIsVisible l (.getSelectedIndex l))
+;             (show-help-text app (.getSelectedValue l))))))
+;     (on-click 2 #(when-let [text-pane (find-focused-text-pane app)]
+;                         (update-token app text-pane)))))
+
+(defn setup-completion-list [l app root]
   (doto l
     (.setBackground (Color. 0xFF 0xFF 0xE8))
     (.setFocusable false)
@@ -383,5 +473,5 @@
           (when-not (.getValueIsAdjusting e)
             (.ensureIndexIsVisible l (.getSelectedIndex l))
             (show-help-text app (.getSelectedValue l))))))
-    (on-click 2 #(when-let [text-pane (find-focused-text-pane app)]
-                        (update-token app text-pane)))))
+    (on-click 2 #(when-let [text-pane (find-focused-text-pane root)]
+                        (update-token root text-pane)))))

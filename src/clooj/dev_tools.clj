@@ -126,32 +126,38 @@
         :else    ["Monospaced" 12]))
 
 (defn set-font
-  ([app font-name size]
+  ([root font-name size]
     (let [f (font font-name size)]
       (awt-event
         (write-value-to-prefs clooj-prefs "app-font"
                               [font-name size])
-        (dorun (map #(.setFont (app %) f)
-                    [:doc-text-area :repl-in-text-area
-                     :repl-out-text-area :arglist-label
-                     :search-text-area :help-text-area
-                     :completion-list]))
-        (reset! current-font [font-name size]))))
-  ([app font-name]
-    (let [size (second @current-font)]
-      (set-font app font-name size))))
+        (config! 
+          [(select root [:#doc-text-area]) 
+           (select root [:#repl-in-text-area])
+           (select root [:#repl-out-text-area]) 
+           (select root [:#search-text-area]) 
+           ; (select root [:#arglist-label])
+           ; (select root [:#help-text-area])
+           ; (select root [:#completion-list])
+           ]
+           :font f)
 
-(defn load-font [app]
-   (apply set-font app (or (read-value-from-prefs clooj-prefs "app-font")
+        (reset! current-font [font-name size]))))
+  ([root font-name]
+    (let [size (second @current-font)]
+      (set-font root font-name size))))
+
+(defn load-font [root]
+   (apply set-font root (or (read-value-from-prefs clooj-prefs "app-font")
                      default-font)))
   
-(defn resize-font [app fun]
+(defn resize-font [root fun]
   (let [[name size] @current-font]
-    (set-font app name (fun size))))
+    (set-font root name (fun size))))
 
-(defn grow-font [app] (resize-font app inc))
+(defn grow-font [root] (resize-font root inc))
 
-(defn shrink-font [app] (resize-font app dec))
+(defn shrink-font [root] (resize-font root dec))
 
 ;; caret finding
 
@@ -161,16 +167,24 @@
 
 (def caret-position (atom nil))
 
-(defn save-caret-position [app]
-  (when-lets [text-area (app :doc-text-area)
+; (defn save-caret-position [app]
+;   (when-lets [text-area (app :doc-text-area)
+;               pos (get @caret-position text-area)
+;               file @(:file app)]
+;     (when-not (.isDirectory file)
+;       (let [key-str (str "caret_" (.hashCode (.getAbsolutePath file)))]
+;         (write-value-to-prefs clooj-prefs key-str pos)))))
+
+(defn save-caret-position [root app]
+  (when-lets [text-area (select root [:#doc-text-area])
               pos (get @caret-position text-area)
-              file @(:file app)]
+              file @(:file @app)]
     (when-not (.isDirectory file)
       (let [key-str (str "caret_" (.hashCode (.getAbsolutePath file)))]
         (write-value-to-prefs clooj-prefs key-str pos)))))
 
-(defn load-caret-position [app]
-  (when-lets [text-area (app :doc-text-area)
+(defn load-caret-position [root app]
+  (when-lets [text-area (select root [:#doc-text-area])
               file @(:file app)]
     (when-not (.isDirectory file)
       (when-lets [key-str (str "caret_" (.hashCode (.getAbsolutePath file)))
@@ -183,13 +197,15 @@
 (defn update-caret-position [text-comp]
   (swap! caret-position assoc text-comp (.getCaretPosition text-comp)))
 
-(defn display-caret-position [app]
-  (let [{:keys [row col]} (get-caret-coords (:doc-text-area app))]
-    (.setText (:pos-label app) (str " " (inc row) "|" (inc col)))))
 
-(defn handle-caret-move [app text-comp ns]
+(defn display-caret-position [root]
+  (let [{:keys [row col]} (get-caret-coords (select root [:#doc-text-area]))]
+    (config! (select root [:#pos-label]) :text (str " " (inc row) "|" (inc col)))
+    root))
+
+(defn handle-caret-move [root app text-comp ns]
   (update-caret-position text-comp)
-  (help-handle-caret-move app text-comp)
+  (help-handle-caret-move root text-comp)
   (send-off highlight-agent
             (fn [old-pos]
               (try
@@ -209,21 +225,21 @@
                 (try
                   (let [pos (@caret-position text-comp)
                         text (get-text-str text-comp)]
-                    (when-not (= pos old-pos)
-                      (let [arglist-text
-                            (arglist-from-caret-pos app ns text pos)]
-                        (awt-event (.setText (:arglist-label app) arglist-text)))))
-                  (catch Throwable t (.printStackTrace t)))))))
-   
-;; highlighting
+                    ; (when-not (= pos old-pos)
+                    ;   (let [arglist-text (arglist-from-caret-pos root app ns text pos)]
+                    ;     (awt-event (config! (select root [:#arglist-label]) :text arglist-text))))
 
-(defn activate-caret-highlighter [app]
-  (when-let [text-comp (app :doc-text-area)]
-    (let [f #(handle-caret-move app text-comp (get-file-ns app))]
+                    )
+                  (catch Throwable t (.printStackTrace t)))))))
+
+(defn activate-caret-highlighter [root app]
+  (when-let [text-comp (select root [:#doc-text-area])]
+    (let [f #(handle-caret-move root app text-comp (get-file-ns root))] 
       (add-caret-listener text-comp f)
       (add-text-change-listener text-comp f)))
-  (when-let [text-comp (app :repl-in-text-area)]
-    (let [f #(handle-caret-move app text-comp (get-repl-ns app))]
+  (when-let [text-comp (select root [:#repl-in-text-area])]
+    ; (pprint app)
+    (let [f #(handle-caret-move root app text-comp (get-repl-ns app))] ;;;;;;;;;;;
       (add-caret-listener text-comp f)
       (add-text-change-listener text-comp f))))
 
@@ -243,36 +259,36 @@
 
 ;; temp files
 
-(defn dump-temp-doc [app orig-f txt]
+(defn dump-temp-doc [root orig-f txt]
   (try 
     (when orig-f
       (let [orig (.getAbsolutePath orig-f)
             f (.getAbsolutePath (get-temp-file orig-f))]
         (spit f txt)
-        (awt-event (.updateUI (app :docs-tree)))))
+        (awt-event (.updateUI (select root [:#docs-tree])))))
        (catch Exception e nil)))
 
 (def temp-file-manager (agent 0))
 
-(defn update-temp [app]
-  (let [text-comp (app :doc-text-area)
+(defn update-temp [root app]
+  (let [text-comp (select root [:#doc-text-area])
         txt (get-text-str text-comp)
-        f @(app :file)]
+        f @(@app :file)]
     (send-off temp-file-manager
               (fn [old-pos]
                 (try
                   (when-let [pos (get @caret-position text-comp)]
                     (when-not (= old-pos pos)
-                      (dump-temp-doc app f txt))
+                      (dump-temp-doc root f txt))
                     pos)
                      (catch Throwable t (awt-event (.printStackTrace t))))))))
   
-(defn setup-temp-writer [app]
-  (let [text-comp (:doc-text-area app)]
+(defn setup-temp-writer [root app]
+  (let [text-comp (select root [:#doc-text-area])]
     (add-text-change-listener text-comp
       #(when-not @changing-file
          (update-caret-position text-comp)
-         (update-temp app)))))
+         (update-temp root app)))))
 
 (declare restart-doc)
 
@@ -286,8 +302,8 @@
   (not (some #{(file-suffix f)}
              ["jar" "class" "dll" "jpg" "png" "bmp"])))
 
-(defn setup-tree [app]
-  (let [tree (:docs-tree app)
+(defn setup-tree [root app]
+  (let [tree (select root [:#docs-tree])
         save #(save-expanded-paths tree)]
     (doto tree
       (.setRootVisible false)
@@ -305,9 +321,9 @@
               (let [f (.. e getPath getLastPathComponent
                             getUserObject)]
                 (when (and
-                        (not= f @(app :file))
+                        (not= f @(@app :file))
                         (text-file? f))
-                  (restart-doc app f))))))))))
+                  (restart-doc root app f))))))))))
   
 ;; build gui
 
@@ -317,15 +333,15 @@
 (defn make-scroll-pane [text-area]
   (RTextScrollPane. text-area))
 
-(defn setup-search-text-area [app]
-  (let [sta (doto (app :search-text-area)
+(defn setup-search-text-area [root]
+  (let [sta (doto (select root [:#search-text-area])
       (.setVisible false)
       (.setBorder (BorderFactory/createLineBorder Color/DARK_GRAY))
-      (.addFocusListener (proxy [FocusAdapter] [] (focusLost [_] (stop-find app)))))]
-    (add-text-change-listener sta #(update-find-highlight app false))
-    (attach-action-keys sta ["ENTER" #(highlight-step app false)]
-                            ["shift ENTER" #(highlight-step app true)]
-                            ["ESCAPE" #(escape-find app)])))
+      (.addFocusListener (proxy [FocusAdapter] [] (focusLost [_] (stop-find root)))))]
+    (add-text-change-listener sta #(update-find-highlight root false))
+    (attach-action-keys sta ["ENTER" #(highlight-step root false)]
+                            ["shift ENTER" #(highlight-step root true)]
+                            ["ESCAPE" #(escape-find root)])))
 
 (defn create-arglist-label []
   (doto (JLabel.)
@@ -390,23 +406,23 @@
 
 ;; clooj docs
 
-(defn restart-doc [app ^File file]
+(defn restart-doc [root app ^File file]
   (send-off temp-file-manager
-            (let [f @(:file app)
-                  txt (get-text-str (:doc-text-area app))]
+            (let [f @(:file @app)
+                  txt (get-text-str (select root [:#doc-text-area]))]
               (let [temp-file (get-temp-file f)]
                 (fn [_] (when (and f temp-file (.exists temp-file))
-                          (dump-temp-doc app f txt))
+                          (dump-temp-doc root f txt))
                   0))))
   (await temp-file-manager)
-  (let [frame (app :frame)
-        text-area (app :doc-text-area)
+  (let [frame root
+        text-area (select root [:#doc-text-area])
         temp-file (get-temp-file file)
         file-to-open (if (and temp-file (.exists temp-file)) temp-file file)
-        doc-label (app :doc-label)]
+        doc-label (select root [:#doc-label])]
     ;(remove-text-change-listeners text-area)
     (reset! changing-file true)
-    (save-caret-position app)
+    (save-caret-position root app)
     (.. text-area getHighlighter removeAllHighlights)
     (if (and file-to-open (.exists file-to-open) (.isFile file-to-open))
       (do (let [txt (slurp file-to-open)
@@ -423,32 +439,32 @@
           (.setEditable text-area false)))
     (update-caret-position text-area)
     (setup-autoindent text-area)
-    (reset! (app :file) file)
-    (switch-repl app (first (get-selected-projects app)))
-    (apply-namespace-to-repl app)))
+    (reset! (@app :file) file)
+    (switch-repl root app (first (get-selected-projects root)))
+    (apply-namespace-to-repl root app)))
 
-(defn save-file [app]
+(defn save-file [root app]
   (try
-    (let [f @(app :file)
+    (let [f @(@app :file)
           ft (File. (str (.getAbsolutePath f) "~"))]
       (with-open [writer (BufferedWriter.
                            (OutputStreamWriter.
                              (FileOutputStream. f)
                              "UTF-8"))]
-        (.write (app :doc-text-area) writer))
+        (.write (select root [:#doc-text-area]) writer))
       (send-off temp-file-manager (fn [_] 0))
       (.delete ft)
-      (.updateUI (app :docs-tree)))
+      (.updateUI (select root [:#docs-tree])))
     (catch Exception e (JOptionPane/showMessageDialog
                          nil "Unable to save file."
                          "Oops" JOptionPane/ERROR_MESSAGE))))
 
 (def project-clj-text (.trim
-"
-(defproject PROJECTNAME \"1.0.0-SNAPSHOT\"
+  "
+  (defproject PROJECTNAME \"1.0.0-SNAPSHOT\"
   :description \"FIXME: write\"
   :dependencies [[org.clojure/clojure \"1.3.0\"]])
-"))
+  "))
       
 (defn specify-source [project-dir title default-namespace]
   (when-let [namespace (JOptionPane/showInputDialog nil
@@ -466,41 +482,41 @@
       (.mkdirs the-dir)
       [(File. the-dir (str name ".clj")) namespace])))
       
-(defn create-file [app project-dir default-namespace]
+(defn create-file [root project-dir default-namespace]
    (when-let [[file namespace] (specify-source project-dir
                                           "Create a source file"
                                           default-namespace)]
-     (let [tree (:docs-tree app)]
+     (let [tree (select root [:#docs-tree])]
        (spit file (str "(ns " namespace ")\n"))
-       (update-project-tree (:docs-tree app))
+       (update-project-tree (select root [:#docs-tree]))
        (set-tree-selection tree (.getAbsolutePath file)))))
 
-(defn new-project-clj [app project-dir]
+(defn new-project-clj [project-dir]
   (let [project-name (.getName project-dir)
         file-text (.replace project-clj-text "PROJECTNAME" project-name)]
     (spit (File. project-dir "project.clj") file-text)))
 
-(defn new-project [app]
+(defn new-project [root]
   (try
-    (when-let [dir (choose-file (app :frame) "Create a project directory" "" false)]
+    (when-let [dir (choose-file root "Create a project directory" "" false)]
       (awt-event
         (let [path (.getAbsolutePath dir)]
           (.mkdirs (File. dir "src"))
-          (new-project-clj app dir)
-          (add-project app path)
-          (update-project-tree (:docs-tree app))
-          (set-tree-selection (app :docs-tree) path)
-          (create-file app dir (str (.getName dir) ".core")))))
+          (new-project-clj dir)
+          (add-project {} path)
+          (update-project-tree (select root [:#docs-tree]))
+          (set-tree-selection (select root [:#docs-tree]) path)
+          (create-file root dir (str (.getName dir) ".core")))))
       (catch Exception e (do (JOptionPane/showMessageDialog nil
                                "Unable to create project."
                                "Oops" JOptionPane/ERROR_MESSAGE)
                            (.printStackTrace e)))))
   
-(defn rename-file [app]
-  (when-let [old-file @(app :file)]
-    (let [tree (app :docs-tree)
+(defn rename-file [root app]
+  (when-let [old-file @(@app :file)]
+    (let [tree (select root [:#docs-tree])
           [file namespace] (specify-source
-                             (first (get-selected-projects app))
+                             (first (get-selected-projects root))
                              "Rename a source file"
                              (get-selected-namespace tree))]
       (when file
@@ -508,8 +524,8 @@
         (update-project-tree (:docs-tree app))
         (awt-event (set-tree-selection tree (.getAbsolutePath file)))))))
 
-(defn delete-file [app]
-  (let [path (get-selected-file-path app)]
+(defn delete-file [root]
+  (let [path (get-selected-file-path root)]
     (when (confirmed? "Are you sure you want to delete this file?\nDeleting cannot be undone." path)
       (loop [f (File. path)]
         (when (and (empty? (.listFiles f))
@@ -518,7 +534,7 @@
                          (.endsWith p (str File/separator "src")))))
           (.delete f)
           (recur (.getParentFile f))))
-      (update-project-tree (app :docs-tree)))))
+      (update-project-tree (select root [:#docs-tree])))))
 
 (defn remove-project [app]
   (when (confirmed? "Remove the project from list? (No files will be deleted.)"
@@ -545,70 +561,70 @@
                           classpath-dirs)]
     (first (filter #(and (.exists %) (.isFile %)) file-candidates))))
 
-(defn goto-definition [ns app]
-  (let [text-comp (:doc-text-area app)
+(defn goto-definition [root ns app]
+  (let [text-comp (select root [:#doc-text-area])
         pos (.getCaretPosition text-comp)
         text (.getText text-comp)
         src-file (:file (meta (do 
                                             (token-from-caret-pos ns text pos) nil)))
         line (:line (meta (do (find-ns (symbol ns))
                                         (token-from-caret-pos ns text pos) nil)))
-        project-path (first (get-selected-projects app))
+        project-path (first (get-selected-projects root))
         file (find-file project-path src-file)]
     (when (and file line)
-      (when (not= file @(:file app))
+      (when (not= file @(:file @app))
         (restart-doc app file)
-        (set-tree-selection (:docs-tree app) (.getAbsolutePath file)))
+        (set-tree-selection (select root [:#docs-tree]) (.getAbsolutePath file)))
       (scroll-to-line text-comp line))))
 
-(defn make-menus [app]
+(defn make-menus [root app]
   (when (is-mac)
     (System/setProperty "apple.laf.useScreenMenuBar" "true"))
-  (let [menu-bar (JMenuBar.)]
-    (. (app :frame) setJMenuBar menu-bar)
+  (let [menu-bar (menubar)]
+    (config! root :menubar menu-bar)
     (let [file-menu
           (add-menu menu-bar "File" "F"
-            ["New" "N" "cmd1 N" #(create-file app (first (get-selected-projects app)) "")]
-            ["Save" "S" "cmd1 S" #(save-file app)]
-            ["Move/Rename" "M" nil #(rename-file app)]
+            ["New" "N" "cmd1 N" #(create-file root app (first (get-selected-projects root)) "")]
+            ["Save" "S" "cmd1 S" #(save-file root app)]
+            ["Move/Rename" "M" nil #(rename-file root app)]
             ["Revert" "R" nil #(revert-file app)]
             ["Delete" nil nil #(delete-file app)])]
-      (when-not (is-mac)
-        (add-menu-item file-menu "Exit" "X" nil #(System/exit 0))))
-    (add-menu menu-bar "Project" "P"
-      ["New..." "N" "cmd1 shift N" #(new-project app)]
-      ["Open..." "O" "cmd1 shift O" #(open-project app)]
-      ["Move/Rename" "M" nil #(rename-project app)]
-      ["Remove" nil nil #(remove-project app)])
-    (add-menu menu-bar "Source" "U"
-      ["Comment-out" "C" "cmd1 SEMICOLON" #(comment-out (:doc-text-area app))]
-      ["Uncomment-out" "U" "cmd1 shift SEMICOLON" #(uncomment-out (:doc-text-area app))]
-      ["Fix indentation" "F" "cmd1 BACK_SLASH" #(fix-indent-selected-lines (:doc-text-area app))]
-      ["Indent lines" "I" "cmd1 CLOSE_BRACKET" #(indent (:doc-text-area app))]
-      ["Unindent lines" "D" "cmd1 OPEN_BRACKET" #(indent (:doc-text-area app))]
-      ["Name search/docs" "S" "TAB" #(show-tab-help app (find-focused-text-pane app) inc)]
-      ;["Go to definition" "G" "cmd1 D" #(goto-definition (get-file-ns app) app)]
-      )
-    (add-menu menu-bar "REPL" "R"
-      ["Evaluate here" "E" "cmd1 ENTER" #(send-selected-to-repl app)]
-      ["Evaluate entire file" "F" "cmd1 E" #(send-doc-to-repl app)]
-      ["Apply file ns" "A" "cmd1 shift A" #(apply-namespace-to-repl app)]
-      ["Clear output" "C" "cmd1 K" #(.setText (app :repl-out-text-area) "")]
-      ["Restart" "R" "cmd1 R" #(restart-repl app
-                            (first (get-selected-projects app)))]
-      ["Print stack trace for last error" "T" "cmd1 T" #(print-stack-trace app)])
-    (add-menu menu-bar "Search" "S"
-      ["Find" "F" "cmd1 F" #(start-find app)]
-      ["Find next" "N" "cmd1 G" #(highlight-step app false)]
-      ["Find prev" "P" "cmd1 shift G" #(highlight-step app true)])
-    (add-menu menu-bar "Window" "W"
-      ["Go to REPL input" "R" "cmd1 3" #(.requestFocusInWindow (:repl-in-text-area app))]
-      ["Go to Editor" "E" "cmd1 2" #(.requestFocusInWindow (:doc-text-area app))]
-      ["Go to Project Tree" "P" "cmd1 1" #(.requestFocusInWindow (:docs-tree app))]
-      ["Increase font size" nil "cmd1 PLUS" #(grow-font app)]
-      ["Decrease font size" nil "cmd1 MINUS" #(shrink-font app)]
-      ["Choose font..." nil nil #(apply show-font-window
-                                        app set-font @current-font)])))
+          (when-not (is-mac)
+            (add-menu-item file-menu "Exit" "X" nil #(System/exit 0))))
+      (add-menu menu-bar "Project" "P"
+        ["New..." "N" "cmd1 shift N" #(new-project app)]
+        ["Open..." "O" "cmd1 shift O" #(open-project app)]
+        ["Move/Rename" "M" nil #(rename-project app)]
+        ["Remove" nil nil #(remove-project app)])
+      (add-menu menu-bar "Source" "U"
+        ["Comment-out" "C" "cmd1 SEMICOLON" #(comment-out (select root [:#doc-text-area]))]
+        ["Uncomment-out" "U" "cmd1 shift SEMICOLON" #(uncomment-out (select root [:#doc-text-area]))]
+        ["Fix indentation" "F" "cmd1 BACK_SLASH" #(fix-indent-selected-lines (select root [:#doc-text-area]))]
+        ["Indent lines" "I" "cmd1 CLOSE_BRACKET" #(indent (select root [:#doc-text-area]))]
+        ["Unindent lines" "D" "cmd1 OPEN_BRACKET" #(indent (select root [:#doc-text-area]))]
+        ["Name search/docs" "S" "TAB" #(show-tab-help app (find-focused-text-pane app) inc)]
+        ;["Go to definition" "G" "cmd1 D" #(goto-definition root (get-file-ns app) app)]
+        )
+      (add-menu menu-bar "REPL" "R"
+        ["Evaluate here" "E" "cmd1 ENTER" #(send-selected-to-repl root app)]
+        ["Evaluate entire file" "F" "cmd1 E" #(send-doc-to-repl root app)]
+        ["Apply file ns" "A" "cmd1 shift A" #(apply-namespace-to-repl root app)]
+        ["Clear output" "C" "cmd1 K" #(.setText (select root [:#repl-out-text-area]) "")]
+        ["Restart" "R" "cmd1 R" #(restart-repl root app
+                              (first (get-selected-projects root)))]
+        ["Print stack trace for last error" "T" "cmd1 T" #(print-stack-trace root app)])
+      (add-menu menu-bar "Search" "S"
+        ["Find" "F" "cmd1 F" #(start-find app)]
+        ["Find next" "N" "cmd1 G" #(highlight-step app false)]
+        ["Find prev" "P" "cmd1 shift G" #(highlight-step app true)])
+      (add-menu menu-bar "Window" "W"
+        ["Go to REPL input" "R" "cmd1 3" #(.requestFocusInWindow (select root [:#repl-in-text-area]))]
+        ["Go to Editor" "E" "cmd1 2" #(.requestFocusInWindow (select root [:#doc-text-area]))]
+        ["Go to Project Tree" "P" "cmd1 1" #(.requestFocusInWindow (select root [:#docs-tree]))]
+        ["Increase font size" nil "cmd1 PLUS" #(grow-font app)]
+        ["Decrease font size" nil "cmd1 MINUS" #(shrink-font app)]
+        ["Choose font..." nil nil #(apply show-font-window
+                                          root set-font @current-font)])))
       
     
 (defn add-visibility-shortcut [app]
@@ -622,32 +638,7 @@
               (.toFront (:frame app)))))
         AWTEvent/KEY_EVENT_MASK))))
 
-;; startup
 
-
-(defn startup [create-app current-app]
-  (Thread/setDefaultUncaughtExceptionHandler
-    (proxy [Thread$UncaughtExceptionHandler] []
-      (uncaughtException [thread exception]
-                       (println thread) (.printStackTrace exception))))
-  (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
-  (let [app (create-app)]
-    (reset! current-app app)
-    (make-menus app)
-    (add-visibility-shortcut app)
-    (add-repl-input-handler app)
-    (setup-tab-help app (app :repl-in-text-area))
-    (doall (map #(add-project app %) (load-project-set)))
-    (let [frame (app :frame)]
-      (persist-window-shape clooj-prefs "main-window" frame) 
-      (.setVisible frame true)
-      (on-window-activation frame #(update-project-tree (app :docs-tree))))
-    (setup-temp-writer app)
-    (setup-tree app)
-    (let [tree (app :docs-tree)]
-      (load-expanded-paths tree)
-      (load-tree-selection tree))
-    (load-font app)))
 
 ;; testing
 
