@@ -13,15 +13,17 @@
            (java.awt Rectangle)
            (java.net URL URLClassLoader URLDecoder))
   (:use [clooj.utils :only (attach-child-action-keys attach-action-keys
-                            awt-event
+                            awt-event get-file-ns
                             append-text when-lets get-text-str get-directories)]
         [clooj.brackets :only (find-line-group find-enclosing-brackets)]
-        [clojure.pprint :only (pprint)]
-        [clooj.project :only (get-temp-file)]
         [clooj.help :only (get-var-maps)]
-        [clj-inspector.jars :only (get-entries-in-jar jar-files)])
+        [clooj.utils :only (gen-map get-temp-file)]
+        [clj-inspector.jars :only (get-entries-in-jar jar-files)]
+        [seesaw core border color])
   (:require [clojure.string :as string]
-            [clojure.java.io :as io]))
+            [seesaw.rsyntax :as rsyntax]
+            [clojure.java.io :as io])
+  (:import [org.fife.ui.rtextarea RTextScrollPane]))
 
 (use 'clojure.java.javadoc)
 
@@ -256,20 +258,13 @@
            #(Math/max 0 (dec %)))
     (update-repl-in app)))
 
-(defn get-file-ns [app]
-  (try
-    (when-let [sexpr (read-string (.getText (app :doc-text-area)))]
-      (when (= 'ns (first sexpr))
-        (str (second sexpr))))
-    (catch Exception e)))
-
 (defn load-file-in-repl [app]
   (when-lets [f0 @(:file app)
               f (or (get-temp-file f0) f0)]
     (send-to-repl app (str "(load-file \"" (.getAbsolutePath f) "\")"))))
 
 (defn apply-namespace-to-repl [app]
-  (when-let [current-ns (get-file-ns app)]
+  (when-let [current-ns (get-file-ns (config (app :doc-text-area) :text))]
     (send-to-repl app (str "(ns " current-ns ")"))
     (swap! repls assoc-in
            [(-> app :repl deref :project-path) :ns]
@@ -324,3 +319,48 @@
 
 (defn print-stack-trace [app]
     (send-to-repl app "(.printStackTrace *e)"))
+
+;; view
+
+(defn repl
+  [app-atom]
+  (let [repl-out-text-area  (rsyntax/text-area 
+                                      :wrap-lines?    false
+                                      :editable?      false
+                                      :border         (line-border 
+                                                          :thickness 7
+                                                          :color (color "#FFFFFF" 0))
+                                      :id             :repl-out-text-area
+                                      :class          [:repl :syntax-editor])
+        repl-out-writer   (make-repl-writer repl-out-text-area)
+        repl-out-scroll-pane (RTextScrollPane. repl-out-text-area false) ;; default to no linenumbers
+        repl-output-vertical-panel (vertical-panel 
+                                      :items          [repl-out-scroll-pane]                                      
+                                      :id             :repl-output-vertical-panel
+                                      :class          :repl)
+        repl-in-text-area (rsyntax/text-area 
+                                      :wrap-lines?    false
+                                      :syntax         "clojure"     
+                                      :border         (line-border 
+                                                          :thickness 7
+                                                          :color (color "#FFFFFF" 0))                                
+                                      :id             :repl-in-text-area
+                                      :class          [:repl :syntax-editor])
+        repl-input-vertical-panel (vertical-panel 
+                                      :items          [repl-in-text-area]                                      
+                                      :id             :repl-input-vertical-panel
+                                      :class          :repl)
+        repl-split-pane (top-bottom-split             repl-output-vertical-panel 
+                                                      repl-input-vertical-panel
+                                      :divider-location 0.66
+                                      :resize-weight 0.66
+                                      :divider-size   3)]
+    (.setAntiAliasingEnabled repl-out-text-area true)
+    (swap! app-atom conj (gen-map
+                            repl-out-scroll-pane
+                            repl-out-text-area
+                            repl-in-text-area
+                            repl-input-vertical-panel
+                            repl-out-writer
+                            repl-split-pane))
+    repl-split-pane))

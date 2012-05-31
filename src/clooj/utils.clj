@@ -11,15 +11,34 @@
            (java.util.prefs Preferences)
            (java.security MessageDigest)
            (java.io ByteArrayInputStream ByteArrayOutputStream
-                    File FilenameFilter
+                    File FilenameFilter StringReader
                     ObjectInputStream ObjectOutputStream
                     OutputStream Writer PrintStream)
            (javax.swing AbstractAction JButton JFileChooser JMenu JMenuBar JMenuItem BorderFactory
                         JOptionPane JSplitPane KeyStroke SpringLayout SwingUtilities)
            (javax.swing.event CaretListener DocumentListener UndoableEditListener)
-           (javax.swing.undo UndoManager)))
+           (javax.swing.undo UndoManager))
+  (:use [seesaw.core :only (config config!)]))
 
 ;; general
+(def no-project-txt
+    "\n Welcome to clooj, a lightweight IDE for clojure\n
+     To start coding, you can either\n
+       a. create a new project
+            (select the Project > New... menu), or
+       b. open an existing project
+            (select the Project > Open... menu)\n
+     and then either\n
+       a. create a new file
+            (select the File > New menu), or
+       b. open an existing file
+            (click on it in the tree at left).")
+       
+(def no-file-txt
+    "To edit source code you need to either: <br>
+     &nbsp;1. create a new file 
+     (select menu <b>File > New...</b>)<br>
+     &nbsp;2. edit an existing file by selecting one at left.</html>")
 
 (defmacro do-when [f & args]
   (let [args_ args]
@@ -174,9 +193,25 @@
   (let [doc (.getDocument text-comp)]
     (.getText doc 0 (.getLength doc))))
 
+
+(defn get-file-ns [text]
+  (try
+    (when-let [sexpr (read-string text)]
+      (when (= 'ns (first sexpr))
+        (str (second sexpr))))
+    (catch Exception e)))
+
 (defn add-caret-listener [text-comp f]
   (.addCaretListener text-comp
                      (reify CaretListener (caretUpdate [this evt] (f)))))
+
+;; highlighting
+
+(defn activate-caret-highlighter [handler app k]
+  (when-let [text-comp (app k)]
+    (let [f #(handler app text-comp (get-file-ns (config (app k) :text)))]
+      (add-caret-listener text-comp f)
+      (add-text-change-listener text-comp f))))
 
 (defn set-selection [text-comp start end]
   (doto text-comp (.setSelectionStart start) (.setSelectionEnd end)))
@@ -489,4 +524,81 @@
       (flush [] (.flush writer))
       (close [] (.close writer)))
     (PrintStream. true)))
+
+;; temp files
+
+(def temp-file-manager (agent 0))
+
+(def changing-file (atom false))
+
+(defn get-temp-file [^File orig]
+  (when orig
+    (File. (str (.getAbsolutePath orig) "~"))))
+
+(defn dump-temp-doc [app orig-f txt]
+  (try 
+    (when orig-f
+      (let [orig (.getAbsolutePath orig-f)
+            f (.getAbsolutePath (get-temp-file orig-f))]
+        (spit f txt)
+        (awt-event (.updateUI (app :docs-tree)))))
+       (catch Exception e nil)))
+
+(defn update-temp [app caret-position-atom]
+  (let [text-comp (app :doc-text-area)
+        txt (get-text-str text-comp)
+        f @(app :file)]
+    (send-off temp-file-manager
+              (fn [old-pos]
+                (try
+                  (when-let [pos (get @caret-position-atom text-comp)]
+                    (when-not (= old-pos pos)
+                      (dump-temp-doc app f txt))
+                    pos)
+                     (catch Throwable t (awt-event (.printStackTrace t))))))))
+  
+(defn setup-temp-writer [app]
+  (let [text-comp (:doc-text-area app)]
+    (add-text-change-listener text-comp
+      #(when-not @changing-file
+         ((app :update-caret-position) text-comp)
+         (update-temp app)))))
+
+(defn restart-doc [app ^File file]
+  (send-off temp-file-manager
+            (let [f @(:file app)
+                  txt (get-text-str (:doc-text-area app))]
+              (let [temp-file (get-temp-file f)]
+                (fn [_] (when (and f temp-file (.exists temp-file))
+                          (dump-temp-doc app f txt))
+                  0))))
+  (await temp-file-manager)
+  (let [frame (app :frame)
+        text-area (app :doc-text-area)
+        temp-file (get-temp-file file)
+        file-to-open (if (and temp-file (.exists temp-file)) temp-file file)
+        doc-label (app :doc-label)]
+    ;(remove-text-change-listeners text-area)
+    (reset! changing-file true)
+    ((app :save-caret-position) app)
+    (.. text-area getHighlighter removeAllHighlights)
+    (if (and file-to-open (.exists file-to-open) (.isFile file-to-open))
+      (do (let [txt (slurp file-to-open)
+                rdr (StringReader. txt)]
+            (.read text-area rdr nil))
+          (.setText doc-label (str "Source Editor \u2014 " (.getName file)))
+          (config! text-area :editable?  true)
+          (if (.endsWith (.getName file-to-open) ".clj")
+            (config! text-area :syntax  :clojure)
+            (config! text-area :syntax  :none)))
+      (do (.setText text-area no-project-txt)
+          (.setText doc-label (str "Source Editor (No file selected)"))
+          (.setEditable text-area false)))
+    ((app :update-caret-position) text-area)
+    ((app :setup-autoindent) text-area)
+    (reset! (app :file) file)
+    ((app :switch-repl) app (first ((app :get-selected-projects) app)))
+    ((app :apply-namespace-to-repl) app)))
+
+
 
