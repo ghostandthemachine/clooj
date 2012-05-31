@@ -81,20 +81,6 @@
             attach-navigation-keys)
     ;; file tree
     (setup-tree app)
-    ;; fonts
-    (cond 
-      (is-mac)
-      (config! (select (app :frame) [:.syntax-editor]) :font (font 
-                                                                :name "COURIER-NEW"
-                                                                :size 12))
-      (is-win)
-      (config! (select (app :frame) [:.syntax-editor]) :font (font 
-                                                                :name "COURIER-NEW"
-                                                                :size 12))
-      :else 
-      (config! (select (app :frame) [:.syntax-editor]) :font (font 
-                                                                :name "MONOSPACED"
-                                                                :size 12)))
     ;; global
     (add-visibility-shortcut app)
     (dorun (map #(attach-global-action-keys % app)

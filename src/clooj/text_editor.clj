@@ -1,7 +1,8 @@
 (ns clooj.text-editor
-    (:use [seesaw core graphics color border]
+    (:use [seesaw core graphics color border font]
           [clooj utils doc-browser highlighting brackets help utils search])
-    (:require [seesaw.rsyntax :as rsyntax])
+    (:require [seesaw.rsyntax :as rsyntax]
+              [clj-rsyntax.core :as cr])
     (:import [org.fife.ui.rtextarea RTextScrollPane RTextAreaUI])
     (:import (java.awt.event AWTEventListener FocusAdapter MouseAdapter WindowAdapter KeyAdapter)))
 
@@ -137,9 +138,9 @@
         doc-text-area         (rsyntax/text-area    
                                       :wrap-lines?    false
                                       :syntax         :clojure
-                                      :border         (line-border 
-                                                          :thickness 5
-                                                          :color (color "#FFFFFF" 0))
+                                      ; :border         (line-border 
+                                      ;                     :thickness 5
+                                      ;                     :color (color "#FFFFFF" 0))
                                       :id             :doc-text-area
                                       :class          [:text-editor-comp :syntax-editor])
         doc-scroll-pane       (RTextScrollPane. doc-text-area)
@@ -153,6 +154,21 @@
     (.setCodeFoldingEnabled doc-text-area true)
     (.setAntiAliasingEnabled doc-text-area true)
     (.setFoldIndicatorEnabled doc-scroll-pane true)
+
+        ;; fonts
+    (cond 
+      (is-mac)
+      (config! doc-text-area :font (font 
+                             :name "COURIER-NEW"
+                             :size 12))
+      (is-win)
+      (config! doc-text-area :font (font 
+                             :name "COURIER-NEW"
+                             :size 12))
+      :else 
+      (config! doc-text-area :font (font 
+                             :name "MONOSPACED"
+                             :size 12)))
 
     (swap! app-atom conj (gen-map
                             arglist-label

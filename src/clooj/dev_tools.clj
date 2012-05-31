@@ -2,38 +2,13 @@
 ; All rights reserved.
 ; Eclipse Public License 1.0
 ; arthuredelstein@gmail.com
-; (ns clooj.dev-tools
-
-;            (javax.swing.event TreeSelectionListener
-;                               TreeExpansionListener)
-;            (javax.swing.tree DefaultMutableTreeNode DefaultTreeModel
-;                              TreePath TreeSelectionModel)
-;            (java.awt Insets Rectangle Window)
-;            (java.net URL)
-;            (java.util Map)
-;            (java.io File FileReader StringReader
-;                     BufferedWriter OutputStreamWriter FileOutputStream)
-;            (org.fife.ui.rsyntaxtextarea RSyntaxTextArea SyntaxConstants TokenMakerFactory)  
-;            (org.fife.ui.rtextarea RTextScrollPane))
-  
-;   (:use [seesaw core graphics]
-
-;         [clojure.pprint :only (pprint)]
-;         [clooj.brackets]
-;         [clooj.highlighting]
-;         [clooj.repl]
-;         [clooj.doc-browser]
-;         [clooj.menus])
-;   (:require [clojure.main :only (repl repl-prompt)]
-;             [clojure.set])
-;   (:gen-class
-;    :methods [^{:static true} [show [] void]]))
 
 (ns clooj.dev-tools
   
   (:use [clooj filetree utils help]
         [seesaw core font])
   (:import (java.net URL)
+           (org.fife.ui.rsyntaxtextarea RSyntaxTextArea SyntaxConstants TokenMakerFactory Theme)
            (java.awt Toolkit AWTEvent)
            (java.awt.event WindowAdapter AWTEventListener)
            (javax.swing AbstractListModel BorderFactory JDialog
@@ -41,7 +16,8 @@
                         JPanel JScrollPane JSplitPane JTextArea
                         JTextField JTree KeyStroke SpringLayout JTextPane
                         ListSelectionModel
-                        UIManager)))
+                        UIManager))
+  (:require [clojure.java.io :as io]))
 
 (def gap 5)
 
@@ -150,6 +126,14 @@
     (persist-window-shape clooj-prefs "main-window" frame) 
     (on-window-activation frame #(update-project-tree (app :docs-tree))))
   (load-font app)
+  ;; set theme
+  (let [doc-ta (app :doc-text-area)
+      repl-in-ta (app :repl-in-text-area)
+      repl-out-ta (app :repl-out-text-area)
+      theme (Theme/load (io/input-stream "src/clooj/themes/eclipse.xml"))]
+      (.apply theme doc-ta)
+      (.apply theme repl-in-ta)
+      (.apply theme repl-out-ta))
   (let [tree (app :docs-tree)]
     (load-expanded-paths tree)
     (load-tree-selection tree))

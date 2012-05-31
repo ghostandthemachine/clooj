@@ -9,5 +9,4 @@
                  [ghostandthemachine/seesaw "1.4.2-SNAPSHOT"]
                  [clj-rsyntax "0.0.1-SNAPSHOT"]
                  [org.fife.ui/rsyntaxtextarea "2.0.3"]]
-  :jvm-opts ~(if (= (System/getProperty "os.name") "Mac OS X") ["-Xdock:name=Clooj"] [])
-  )
+  :jvm-opts ~(if (= (System/getProperty "os.name") "Mac OS X") ["-Xdock:name=Clooj"] []))

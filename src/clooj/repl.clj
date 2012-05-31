@@ -327,9 +327,9 @@
   (let [repl-out-text-area  (rsyntax/text-area 
                                       :wrap-lines?    false
                                       :editable?      false
-                                      :border         (line-border 
-                                                          :thickness 7
-                                                          :color (color "#FFFFFF" 0))
+                                      ; :border         (line-border 
+                                      ;                     :thickness 7
+                                      ;                     :color (color "#FFFFFF" 0))
                                       :id             :repl-out-text-area
                                       :class          [:repl :syntax-editor])
         repl-out-writer   (make-repl-writer repl-out-text-area)
@@ -341,9 +341,9 @@
         repl-in-text-area (rsyntax/text-area 
                                       :wrap-lines?    false
                                       :syntax         "clojure"     
-                                      :border         (line-border 
-                                                          :thickness 7
-                                                          :color (color "#FFFFFF" 0))                                
+                                      ; :border         (line-border 
+                                      ;                     :thickness 7
+                                      ;                     :color (color "#FFFFFF" 0))                                
                                       :id             :repl-in-text-area
                                       :class          [:repl :syntax-editor])
         repl-input-vertical-panel (vertical-panel 
