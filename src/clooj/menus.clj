@@ -1,15 +1,17 @@
 (ns clooj.menus
+  (:import [org.fife.ui.rsyntaxtextarea RSyntaxTextArea])
   (:import [org.fife.ui.rtextarea RTextArea])
   (:use [clojure.pprint]
-          [seesaw core]
+        [seesaw core]
         [clooj repl utils project dev-tools indent text-editor filetree doc-browser search style indent])
   (:require 
         [clj-rsyntax.core :as cr]))
 
-; (defn begin-recording-macro!
-;   "Begins recording macro"
-;   [^org.fife.ui.rtextarea.RTextArea rta]
-;   (org.fife.ui.rtextarea.RTextArea/beginRecordingMacro rta))
+
+(defn copy-as-rtf!
+  "Copies the currently selected text to the system clipboard, with any necessary style information (font, foreground color and background color)."
+  [^org.fife.ui.rsyntaxtextarea.RSyntaxTextArea rta] 
+  (.copyAsRtf rta))
 
 (defn make-menus [app]
   (when-not (contains? app :menus)
@@ -29,11 +31,10 @@
       (add-menu menu-bar "Edit" "E"
         ["Undo" "U" "cmd1 Z" #()]
         ["Redo" "Y" "cmd1 shift Z" #(cr/redo-last-action! (app :doc-text-area))]
-        ["Copy" "C" "cmd1 C" #()]
+        ["Copy" "C" "cmd1 C" #(copy-as-rtf! (app :doc-text-area))]
         ["Paste" "P" "cmd1 V" #(cr/paste! (:doc-text-area app))]
         ["Spaces to tabs..." nil "cmd1 alt S" #(cr/convert-spaces-to-tabs! (:doc-text-area app))]
-        ["Tabs to spaces..." nil "cmd1 alt T" #(cr/convert-tabs-to-spaces! (:doc-text-area app))]
-        )
+        ["Tabs to spaces..." nil "cmd1 alt T" #(cr/convert-tabs-to-spaces! (:doc-text-area app))])
       (add-menu menu-bar "Project" "P"
         ["New..." "N" "cmd1 shift N" #(new-project app)]
         ["Open..." "O" "cmd1 shift O" #(open-project app)]
@@ -46,11 +47,10 @@
         ["Indent lines" "I" "cmd1 CLOSE_BRACKET" #(indent (:doc-text-area app))]
         ["Unindent lines" "D" "cmd1 OPEN_BRACKET" #(indent (:doc-text-area app))]
         ["Name search/docs" "S" "TAB" #(show-tab-help app (find-focused-text-pane app) inc)])
-;       (add-menu menu-bar "Tools" "T"
-;         ["Begin recording macro..." nil "ctrl Q" #(cr/begin-recording-macro! (app :doc-text-area))]
-;         ["End recording macro..." nil "ctrl shift Q" #(cr/end-recording-macro! (app :doc-text-area))]
-;         ["Playback last macro..." nil "alt Q" #(cr/playback-last-macro! (app :doc-text-area))]
-; )
+      (add-menu menu-bar "Tools" "T"
+        ["Begin recording macro..." nil "ctrl Q" #(cr/begin-recording-macro!)]
+        ["End recording macro..." nil "ctrl shift Q" #(cr/end-recording-macro!)]
+        ["Playback last macro..." nil "alt Q" #(cr/playback-last-macro!)])
       (add-menu menu-bar "REPL" "R"
         ["Evaluate here" "E" "cmd1 ENTER" #(send-selected-to-repl app)]
         ["Evaluate entire file" "F" "cmd1 E" #(send-doc-to-repl app)]
