@@ -1,10 +1,15 @@
 (ns clooj.text-editor
-    (:use [seesaw core graphics color border font]
-          [clooj utils doc-browser highlighting brackets help utils search])
-    (:require [seesaw.rsyntax :as rsyntax]
-              [clj-rsyntax.core :as cr])
-    (:import [org.fife.ui.rtextarea RTextScrollPane RTextAreaUI])
-    (:import (java.awt.event AWTEventListener FocusAdapter MouseAdapter WindowAdapter KeyAdapter)))
+    (:use [seesaw core graphics color font border]
+          [clooj utils])
+    (:require [clooj.rsyntax :as rsyntax]
+              [clooj.rtextarea :as cr]
+              [clooj.doc-browser :as db]
+              [clooj.highlighting :as h]
+              [clooj.brackets :as b]
+              [clooj.help :as help]
+              [clooj.search :as search])
+    (:import  (org.fife.ui.rtextarea RTextScrollPane)
+              (java.awt.event FocusAdapter MouseAdapter)))
 
 (def highlight-agent (agent nil))
 
@@ -42,12 +47,12 @@
      
 (defn help-handle-caret-move [app text-comp]
   (awt-event
-    (when (@help-state :visible)
-      (let [[start _] (local-token-location (get-text-str text-comp) 
+    (when (@db/help-state :visible)
+      (let [[start _] (db/local-token-location (get-text-str text-comp) 
                                             (.getCaretPosition text-comp))]
-        (if-not (= start (@help-state :pos))
-          (hide-tab-help app)
-          (show-tab-help app text-comp identity))))))
+        (if-not (= start (@db/help-state :pos))
+          (db/hide-tab-help app)
+          (db/show-tab-help app text-comp identity))))))
 
 (defn handle-caret-move [app text-comp ns]
   (update-caret-position text-comp)
@@ -58,12 +63,12 @@
                 (let [pos (@caret-position text-comp)
                       text (get-text-str text-comp)]
                   (when-not (= pos old-pos)
-                    (let [enclosing-brackets (find-enclosing-brackets text pos)
-                          bad-brackets (find-bad-brackets text)
+                    (let [enclosing-brackets (b/find-enclosing-brackets text pos)
+                          bad-brackets (b/find-bad-brackets text)
                           good-enclosures (clojure.set/difference
                                             (set enclosing-brackets) (set bad-brackets))]
                       (awt-event
-                        (highlight-brackets text-comp good-enclosures bad-brackets)))))
+                        (h/highlight-brackets text-comp good-enclosures bad-brackets)))))
                 (catch Throwable t (.printStackTrace t)))))
   (when ns
     (send-off arglist-agent 
@@ -72,7 +77,7 @@
                   (let [pos (@caret-position text-comp)
                         text (get-text-str text-comp)]
                     (when-not (= pos old-pos)
-                      (let [arglist-text (arglist-from-caret-pos app ns text pos)]
+                      (let [arglist-text (help/arglist-from-caret-pos app ns text pos)]
                         (awt-event (.setText (:arglist-label app) arglist-text)))))
                   (catch Throwable t (.printStackTrace t)))))))
 
@@ -87,18 +92,18 @@
                       c (.. text-comp getDocument (getText pos 1) (charAt 0))
                       pos (cond (#{\( \[ \{ \"} c) (inc pos)
                                 (#{\) \] \} \"} c) pos)
-                      [a b] (find-enclosing-brackets (get-text-str text-comp) pos)]
+                      [a b] (b/find-enclosing-brackets (get-text-str text-comp) pos)]
             (set-selection text-comp a (inc b))))))))
 
 ;; search 
 
 (defn setup-search-text-area [app]
   (let [sta (doto (app :search-text-area)
-      (.addFocusListener (proxy [FocusAdapter] [] (focusLost [_] (stop-find app)))))]
-    (add-text-change-listener sta #(update-find-highlight app false))
-    (attach-action-keys sta ["ENTER" #(highlight-step app false)]
-                            ["shift ENTER" #(highlight-step app true)]
-                            ["ESCAPE" #(escape-find app)])))
+      (.addFocusListener (proxy [FocusAdapter] [] (focusLost [_] (search/stop-find app)))))]
+    (add-text-change-listener sta #(search/update-find-highlight app false))
+    (attach-action-keys sta ["ENTER" #(search/highlight-step app false)]
+                            ["shift ENTER" #(search/highlight-step app true)]
+                            ["ESCAPE" #(search/escape-find app)])))
 
 ;; view
 
@@ -108,10 +113,10 @@
                                       :id             :arglist-label
                                       :class          :arg-response)
         search-text-area      (text   :visible? 	  false
-        							  :border         (line-border 
-        							  						:color :grey
-        							  						:thickness 1)
-        							  :id             :search-text-area
+                      							  :border         (line-border 
+                      							  						    :color :grey
+                      							  						    :thickness 1)
+                      							  :id             :search-text-area
                                       :class          :search-area)
         arg-search-panel      (horizontal-panel 
                                       :items          [arglist-label search-text-area]

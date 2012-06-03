@@ -4,10 +4,11 @@
 ; arthuredelstein@gmail.com
 
 (ns clooj.core
-    (:use [seesaw core graphics color border font]
+    (:use 
+          [seesaw core graphics color border font]
           [clooj repl help utils navigate text-editor filetree menus doc-browser dev-tools indent])
-    (:require [seesaw.rsyntax :as rsyntax]
-              [clj-rsyntax.core :as cr])
+    (:require [clooj.rsyntax :as rsyntax]
+              [clooj.rtextarea :as rt])
     (:import [org.fife.ui.rtextarea RTextScrollPane]))
     
 

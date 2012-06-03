@@ -7,7 +7,7 @@
               [clojure.repl :only (source-fn)]
               [clooj.collaj :only (raw-data)])
 
-    (:require [seesaw.rsyntax :as rsyntax]
+    (:require [clooj.rsyntax :as rsyntax]
               [cemerick.pomegranate.aether :as aether])
 
     (:import  (java.io LineNumberReader InputStreamReader PushbackReader)

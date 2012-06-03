@@ -21,7 +21,7 @@
         [clj-inspector.jars :only (get-entries-in-jar jar-files)]
         [seesaw core border color])
   (:require [clojure.string :as string]
-            [seesaw.rsyntax :as rsyntax]
+            [clooj.rsyntax :as rsyntax]
             [clojure.java.io :as io])
   (:import [org.fife.ui.rtextarea RTextScrollPane]))
 
