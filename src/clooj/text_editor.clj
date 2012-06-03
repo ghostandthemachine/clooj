@@ -114,8 +114,8 @@
                                       :class          :arg-response)
         search-text-area      (text   :visible? 	  false
                       							  :border         (line-border 
-                      							  						    :color :grey
-                      							  						    :thickness 1)
+                            							  						    :color     :grey
+                            							  						    :thickness 1)
                       							  :id             :search-text-area
                                       :class          :search-area)
         arg-search-panel      (horizontal-panel 
@@ -143,9 +143,6 @@
         doc-text-area         (rsyntax/text-area    
                                       :wrap-lines?    false
                                       :syntax         :clojure
-                                      ; :border         (line-border 
-                                      ;                     :thickness 5
-                                      ;                     :color (color "#FFFFFF" 0))
                                       :id             :doc-text-area
                                       :class          [:text-editor-comp :syntax-editor])
         doc-scroll-pane       (RTextScrollPane. doc-text-area)

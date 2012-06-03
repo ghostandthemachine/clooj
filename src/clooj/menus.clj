@@ -2,9 +2,7 @@
   (:use [clojure.pprint]
         [seesaw core]
         [clooj repl utils project dev-tools indent text-editor filetree doc-browser search style indent])
-  (:require 
-        [clooj.rsyntaxtextarea :as cr]
-        [clooj.rtextarea :as rt]))
+ )
 
 (defn make-menus [app]
   (when-not (contains? app :menus)
@@ -21,11 +19,6 @@
               ["Delete" nil nil #(delete-file app)])]
         (when-not (is-mac)
           (add-menu-item file-menu "Exit" "X" nil #(System/exit 0))))
-      (add-menu menu-bar "Edit" "E"
-        ["Undo" "U" "cmd1 Z" #()]
-        ["Redo" "Y" "cmd1 shift Z" #(rt/redo-last-action (app :doc-text-area))]
-        ["Copy" "C" "cmd1 C" #(cr/copy-as-rtf (app :doc-text-area))]
-        ["Paste" "P" "cmd1 V" #(rt/paste (:doc-text-area app))])
       (add-menu menu-bar "Project" "P"
         ["New..." "N" "cmd1 shift N" #(new-project app)]
         ["Open..." "O" "cmd1 shift O" #(open-project app)]
@@ -38,10 +31,6 @@
         ["Indent lines" "I" "cmd1 CLOSE_BRACKET" #(indent (:doc-text-area app))]
         ["Unindent lines" "D" "cmd1 OPEN_BRACKET" #(indent (:doc-text-area app))]
         ["Name search/docs" "S" "TAB" #(show-tab-help app (find-focused-text-pane app) inc)])
-      (add-menu menu-bar "Tools" "T"
-        ["Begin recording macro..." nil "ctrl Q" #(rt/begin-recording-macro!)]
-        ["End recording macro..." nil "alt Q" #(rt/end-recording-macro!)]
-        ["Playback last macro..." nil "ctrl shift Q" #(rt/playback-last-macro!)])
       (add-menu menu-bar "REPL" "R"
         ["Evaluate here" "E" "cmd1 ENTER" #(send-selected-to-repl app)]
         ["Evaluate entire file" "F" "cmd1 E" #(send-doc-to-repl app)]

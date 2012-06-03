@@ -7,8 +7,6 @@
     (:use 
           [seesaw core graphics color border font]
           [clooj repl help utils navigate text-editor filetree menus doc-browser dev-tools indent])
-    (:require [clooj.rsyntax :as rsyntax]
-              [clooj.rtextarea :as rt])
     (:import [org.fife.ui.rtextarea RTextScrollPane]))
     
 
@@ -94,10 +92,14 @@
 (defonce current-app (atom nil))
 
 (defn -show []
-  (reset! embedded true)
-  (if (not @current-app)
-    (startup create-app current-app)
-    (.setVisible (:frame @current-app) true)))
+  (reset! embedded false)
+  (reset! current-app (create-app))
+  (add-behaviors @current-app)
+  (make-menus @current-app)
+  (invoke-later
+    (-> 
+      (startup @current-app) 
+      show!)))
 
 (defn -main [& args]
   (reset! embedded false)
