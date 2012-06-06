@@ -4,9 +4,10 @@
 ; arthuredelstein@gmail.com
 
 (ns clooj.core
+    (:gen-class)
     (:use 
           [seesaw core graphics color border font]
-          [clooj repl help utils navigate text-editor filetree menus doc-browser dev-tools indent])
+          [clooj repl help utils navigate editor filetree menus doc-browser dev-tools indent])
     (:import [org.fife.ui.rtextarea RTextScrollPane]))
     
 
@@ -20,7 +21,7 @@
 
 (defn create-app []
   (let [app-init  (atom {})
-        editor    (text-editor app-init)
+        editor    (editor app-init)
         file-tree (file-tree app-init)
         repl      (repl app-init)
         doc-view  (doc-view app-init)

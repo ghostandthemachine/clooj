@@ -1,5 +1,7 @@
 (ns clooj.editor
-    (:use [seesaw core graphics color font border]
+    (:use [seesaw.core :only (label text horizontal-panel vertical-panel config!)]
+          [seesaw color font]
+          [seesaw.border :only (line-border)]
           [clooj utils])
     (:require [clooj.rsyntax :as rsyntax]
               [clooj.doc-browser :as db]

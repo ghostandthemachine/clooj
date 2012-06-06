@@ -1,7 +1,7 @@
 (ns clooj.menus
   (:use [clojure.pprint]
         [seesaw core]
-        [clooj repl utils project dev-tools indent text-editor filetree doc-browser search style indent])
+        [clooj repl utils project dev-tools indent editor filetree doc-browser search style indent])
  )
 
 (defn make-menus [app]

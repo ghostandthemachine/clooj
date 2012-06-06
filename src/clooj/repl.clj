@@ -19,7 +19,8 @@
         [clooj.help :only (get-var-maps)]
         [clooj.utils :only (gen-map get-temp-file)]
         [clj-inspector.jars :only (get-entries-in-jar jar-files)]
-        [seesaw core border color])
+        [seesaw.core :only (config vertical-panel top-bottom-split)] 
+        [seesaw.color])
   (:require [clojure.string :as string]
             [clooj.rsyntax :as rsyntax]
             [clojure.java.io :as io])

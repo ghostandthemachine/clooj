@@ -1,6 +1,6 @@
 (ns clooj.filetree
     (:use [seesaw.core]
-          [clooj utils text-editor])
+          [clooj utils editor])
     (:import (java.io File StringReader BufferedWriter OutputStreamWriter FileOutputStream)
            (java.awt GridLayout)
            (javax.swing JButton JTree JOptionPane JWindow)

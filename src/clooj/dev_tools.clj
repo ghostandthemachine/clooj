@@ -6,7 +6,7 @@
 (ns clooj.dev-tools
   
   (:use [clooj filetree utils help]
-        [seesaw core font])
+        [seesaw font])
   (:import (java.net URL)
            (org.fife.ui.rsyntaxtextarea RSyntaxTextArea SyntaxConstants TokenMakerFactory Theme)
            (java.awt Toolkit AWTEvent)

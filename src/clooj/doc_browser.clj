@@ -1,6 +1,8 @@
 (ns clooj.doc-browser
 
-    (:use     [seesaw core graphics color border]
+    (:use     [seesaw color]
+              [seesaw.border :only (compound-border line-border)]
+              [seesaw.core :only (label listbox scrollable vertical-panel)]
               [clooj.highlighting]
               [clooj.help]
               [clooj.utils]
